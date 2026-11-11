@@ -32,3 +32,20 @@ Character: Tosbi, a calm, curious turtle; a surprise pops out of his shell every
 ## Models (all free, fetched from GitHub releases / PyPI)
 - kokoro-onnx: github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/{kokoro-v1.0.int8.onnx,voices-v1.0.bin}
 - pip: kokoro-onnx soundfile cairosvg phonemizer espeakng-loader librosa
+
+## Growth & evolution (owner request 2026-11-11)
+The owner wants the channel to grow with new characters and new kinds of stories, steered by what viewers watch.
+- Every weekly run starts with a performance review: Metricool YouTube analytics (getAnalyticsAvailableMetrics /
+  getAnalyticsDataByMetrics, brand 8030099) for the last 28 days — views, watch time / average view duration,
+  subscribers per video. Compare Shorts vs long, topic vs topic, EN vs TR interest (comments are off for Made for Kids).
+- Record findings in PERFORMANCE.md (date, what was measured, what it suggests, what you changed). Keep it short.
+- Decide the week's plan from the data: double down on topics/formats that keep viewers, drop what doesn't.
+  With little data (first weeks), keep the proven format and change one thing at a time so effects are measurable.
+- New characters: original designs only (never resemble existing franchise characters). Introduce at most one new
+  recurring character per month, give it a clear, simple personality, add it to CHARACTERS.md with its drawing function,
+  colors and voice settings, and keep Tosbi as the main character so the brand stays recognizable.
+  First planned friend: Zıpzıp, a quick, impatient little rabbit (themes: patience, sharing, taking turns).
+- New story formats are welcome (mini adventures, songs with original lyrics, "Tosbi & friend" dialogues, bedtime calm
+  episodes), extending pipeline/engine.py as needed. Keep: ages 2–6, calm pacing, no scary or unsafe behavior,
+  English key words on screen, both EN and TR tracks, event-first timing.
+- Any big change (new character, new format) is announced in the weekly summary, and still goes out as a draft only.
