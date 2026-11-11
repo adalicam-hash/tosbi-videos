@@ -23,6 +23,12 @@ Character: Tosbi, a calm, curious turtle; a surprise pops out of his shell every
 - Send the TR track mp3 to the owner; they add it in YouTube Studio → Subtitles/Languages → Turkish → Audio.
 - Owner approves every draft in Metricool. Nothing auto-publishes without approval.
 
+## Engine
+- `python3 pipeline/engine.py OUT v|h seg1,seg2 [--long]` builds video + EN/TR mixes from pipeline/episodes.py.
+- v = vertical Short (one segment, no repetition). h = 16:9 long video (several segments, --long adds 'say it with me' + 'where is the ...?' quiz).
+- New content = add a segment to episodes.py (3 items) and, if needed, a drawing to items.py (original designs only).
+- TR tracks are stored in tr_tracks/ for the owner to upload in YouTube Studio.
+
 ## Models (all free, fetched from GitHub releases / PyPI)
 - kokoro-onnx: github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/{kokoro-v1.0.int8.onnx,voices-v1.0.bin}
 - pip: kokoro-onnx soundfile cairosvg phonemizer espeakng-loader librosa
