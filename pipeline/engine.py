@@ -10,6 +10,7 @@ import numpy as np, soundfile as sf
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tosbi import tosbi, sparkle, INK
 from items import DRAW
+from zipzip import zipzip
 import episodes as E
 
 SR = 44100
@@ -19,9 +20,9 @@ CACHE = os.environ.get("TOSBI_CACHE", "/home/claude/tosbi_cache")
 os.makedirs(CACHE, exist_ok=True)
 
 LAYOUTS = {
-    "v": dict(W=1080, H=1920, GROUND=1560, TX=420, TS=1.85, SX=[270, 540, 810], SY=820, R=70,
+    "v": dict(W=1080, H=1920, GROUND=1560, TX=420, TS=1.85, SX=[270, 540, 810], SY=820, R=70, ZIP=(790, 1820, 1.2),
               WORD=(540, 450, 170), TITLE=(540, 170, 120), BUBBLE=(830, 880), SUN=(900, 230)),
-    "h": dict(W=1920, H=1080, GROUND=960, TX=470, TS=1.25, SX=[1130, 1420, 1710], SY=560, R=78,
+    "h": dict(W=1920, H=1080, GROUND=960, TX=470, TS=1.25, SX=[1130, 1420, 1710], SY=560, R=78, ZIP=(985, 1040, 0.95),
               WORD=(1420, 250, 150), TITLE=(240, 95, 90), BUBBLE=(860, 610), SUN=(1780, 120)),
 }
 
@@ -43,15 +44,22 @@ def _engines():
     return _k, _tr
 
 
-def _part(lang, text):
-    key = hashlib.md5(f"v2|{lang}|{text}".encode()).hexdigest()
+VOICES = {  # who -> (kokoro voice, en speed, tr speed, pitch factor)
+    "tosbi": ("af_heart", 0.92, 0.9, 1.16),
+    "zip": ("af_bella", 1.0, 0.98, 1.30),
+}
+
+
+def _part(lang, text, who="tosbi"):
+    vname, ens, trs, pitch = VOICES[who]
+    key = hashlib.md5((f"v2|{lang}|{text}" if who == "tosbi" else f"v3|{who}|{lang}|{text}").encode()).hexdigest()
     fn = f"{CACHE}/{key}.wav"
     if not os.path.exists(fn):
         k, tr = _engines()
         if lang == "tr":
-            s, sr = k.create(tr.phonemize([text])[0].strip().replace("ɫ", "l"), voice="af_heart", speed=0.9, is_phonemes=True)
+            s, sr = k.create(tr.phonemize([text])[0].strip().replace("ɫ", "l"), voice=vname, speed=trs, is_phonemes=True)
         else:
-            s, sr = k.create(text, voice="af_heart", speed=0.92, lang="en-us")
+            s, sr = k.create(text, voice=vname, speed=ens, lang="en-us")
         s = np.asarray(s)
         a = np.where(np.abs(s) > 0.01)[0]
         if len(a):
@@ -59,35 +67,40 @@ def _part(lang, text):
         tmp = fn + ".raw.wav"
         sf.write(tmp, s, sr)
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", tmp, "-af",
-                        f"asetrate={sr}*1.16,aresample={SR},atempo=0.95", fn], check=True)
+                        f"asetrate={sr}*{pitch},aresample={SR},atempo=0.95", fn], check=True)
         os.remove(tmp)
     y, _ = sf.read(fn)
     return y if y.ndim == 1 else y.mean(1)
 
 
 def voice(parts):
-    """Return (audio, onsets_sec) for a list of (lang, text) parts joined by short gaps."""
-    out, on, cur = [], [], 0
+    """Return (audio, onsets_sec, spans) for a list of (lang, text[, who]) parts joined by short gaps.
+    spans = [(start, end, who)] relative to the clip start, used for mouth animation."""
+    out, on, cur, spans = [], [], 0, []
     gap = np.zeros(int(0.16 * SR))
-    for i, (lang, t) in enumerate(parts):
-        y = _part(lang, t)
+    for i, p in enumerate(parts):
+        lang, t = p[0], p[1]
+        who = p[2] if len(p) > 2 else "tosbi"
+        y = _part(lang, t, who)
         on.append(cur / SR)
+        spans.append((cur / SR, (cur + len(y)) / SR, who))
         out.append(y)
         cur += len(y)
         if i < len(parts) - 1:
             out.append(gap)
             cur += len(gap)
-    return np.concatenate(out), on
+    return np.concatenate(out), on, spans
 
 
 def _last_en(parts):
-    return max(i for i, (l, _) in enumerate(parts) if l == "en")
+    return max(i for i, p in enumerate(parts) if p[0] == "en")
 
 
 # ---------------------------------------------------------------- timeline
 class TL:
     def __init__(self):
-        self.en, self.tr, self.talk = [], [], []
+        self.en, self.tr, self.talk, self.ztalk = [], [], [], []
+        self.friend, self.zjumps = [], []  # Zıpzıp visits [t_in, t_out] and little jumps
         self.knocks, self.bubbles, self.pops, self.words, self.bounces = [], [], [], [], []
         self.numbers, self.celebrate, self.clears, self.chapters = [], [], [], []
         self.walk = None
@@ -95,8 +108,8 @@ class TL:
         self.dur = 0
 
     def place(self, en_parts, tr_parts, t, align=True):
-        ea, eo = voice(en_parts)
-        ta, to = voice(tr_parts)
+        ea, eo, es = voice(en_parts)
+        ta, to, ts = voice(tr_parts)
         if align:
             oe, ot = eo[_last_en(en_parts)], to[_last_en(tr_parts)]
             m = max(oe, ot)
@@ -106,7 +119,14 @@ class TL:
             wt = None
         self.en.append((se, ea))
         self.tr.append((st, ta))
-        self.talk += [(se, se + len(ea) / SR - 0.08), (st, st + len(ta) / SR - 0.08)]
+        for base, spans in [(se, es), (st, ts)]:
+            for a, b, who in spans:
+                (self.ztalk if who == "zip" else self.talk).append((base + a, base + b - 0.08))
+        # Zıpzıp hops when he starts a line
+        for base, spans in [(se, es)]:
+            zs = [a for a, b, w in spans if w == "zip"]
+            if zs:
+                self.zjumps.append(base + zs[0])
         return max(se + len(ea) / SR, st + len(ta) / SR), wt
 
 
@@ -124,6 +144,15 @@ def build(seg_names, long=False):
         end, _ = tl.place(ask["en"], ask["tr"], t, align=False)
         t = end + 0.2
         tl.bubbles.append((b0, t))
+        if seg.get("friend"):
+            tl.friend.append([t, None])
+            t += 1.0  # hop-in
+            end, _ = tl.place(E.FRIEND_HELLO["en"], E.FRIEND_HELLO["tr"], t, align=False)
+            tl.zjumps.append(end - 0.9)
+            t = end + 0.3
+            end, wt = tl.place(E.TAKE_TURNS["en"], E.TAKE_TURNS["tr"], t)
+            tl.words.append(dict(t=wt, text=E.TAKE_TURNS["word"], color="#2BB3A3"))
+            t = end + 0.5
         end, wt = tl.place(E.KNOCK["en"], E.KNOCK["tr"], t)
         tl.knocks += [wt + 0.02, wt + 0.38]
         t = end + 0.4
@@ -167,11 +196,16 @@ def build(seg_names, long=False):
         tl.words.append(dict(t=wt, text=s["word"], color="#2E8B57"))
         tl.celebrate.append((wt, end + 0.8))
         t = end + 0.9
+        if seg.get("friend"):
+            end, _ = tl.place(E.FRIEND_BYE["en"], E.FRIEND_BYE["tr"], t, align=False)
+            t = end + 0.5
         if si < len(seg_names) - 1:
             tl.clears.append(t)
             for p in slots:
                 tl.pops[p]["clear"] = t
             tl.words.append(dict(t=t, text="", color="#000"))
+            if seg.get("friend"):
+                tl.friend[-1][1] = t
             t += 1.1
     end, wt = tl.place(E.OUTRO["en"], E.OUTRO["tr"], t)
     tl.bye = wt
@@ -218,6 +252,43 @@ def background(L, t):
             f'<circle cx="{sx}" cy="{sy}" r="90" fill="#FFE27A"/><circle cx="{sx}" cy="{sy}" r="120" fill="#FFE27A" opacity="0.3"/>' + cl +
             f'<path d="M 0 {G-80} Q {W*0.28:.0f} {G-170} {W*0.57:.0f} {G-90} T {W} {G-110} L {W} {H} L 0 {H} Z" fill="#B7E59A"/>'
             f'<rect x="0" y="{G-20}" width="{W}" height="{H-G+20}" fill="#9AD67E"/>' + fl)
+
+
+def draw_friend(tl, L, t):
+    zx, zy, zs = L["ZIP"]
+    W = L["W"]
+    for t_in, t_out in tl.friend:
+        if t < t_in or (t_out is not None and t > t_out + 1.0):
+            continue
+        x, y, sq, ear = zx, zy, 0.0, 0.25 * math.sin(t * 5)
+        if t < t_in + 1.0:  # three hops in from the right
+            u = (t - t_in) / 1.0
+            x = zx + (W - zx + 200) * (1 - ease_out(u))
+            y -= 70 * abs(math.sin(u * 3 * math.pi))
+        elif t_out is not None and t > t_out:  # hop out to the right
+            u = (t - t_out) / 1.0
+            x = zx + (W - zx + 200) * u * u
+            y -= 70 * abs(math.sin(u * 3 * math.pi))
+        else:
+            y -= 6 * abs(math.sin(t * 4))  # gentle, eager bounce
+        for j in tl.zjumps:
+            if j <= t < j + 0.5:
+                y -= 90 * math.sin((t - j) / 0.5 * math.pi)
+                ear = math.sin((t - j) * 25)
+            if j + 0.5 <= t < j + 0.7:
+                sq = math.sin((t - j - 0.5) / 0.2 * math.pi)
+        for a, b in tl.celebrate:
+            if a <= t < b and a > t_in and (t_out is None or a < t_out):
+                y -= 50 * abs(math.sin((t - a) * 6 + 1))
+        if tl.bye and t >= tl.bye:
+            y -= 50 * abs(math.sin((t - tl.bye) * 6 + 1))
+        talking = any(a <= t <= b for a, b in tl.ztalk)
+        surprised = any(pp["t"] - 0.1 <= t < pp["t"] + 0.5 for pp in tl.pops)
+        expr = "surprised" if surprised else ("talk" if talking and int(t * 9) % 2 == 0 else "happy")
+        bt = (t + 1.3) % 2.7
+        blink = math.sin(bt / 0.14 * math.pi) if bt < 0.14 else 0.0
+        return zipzip(x, y, zs, expr=expr, blink=blink, ear=ear, look=(-3, -6), squash=sq)
+    return ""
 
 
 def frame_svg(tl, L, t):
@@ -298,6 +369,7 @@ def frame_svg(tl, L, t):
                 v = (t - pp["clear"]) / 0.8
                 iy -= v * v * H
         p.append(DRAW[pp["kind"]](ix, iy, r, sq))
+    p.append(draw_friend(tl, L, t))
     for nt, slot, n, col in tl.numbers:
         pp = tl.pops[slot]
         if t >= nt and not (pp["clear"] and t > pp["clear"]):
@@ -364,6 +436,11 @@ def music_and_sfx(tl):
         add(sweep(0.4, 220, 300, 7), pp["t"] + 0.7, 0.15)
     for bt_, _ in tl.bounces:
         add(sweep(0.4, 220, 320, 7), bt_, 0.2)
+    for j in tl.zjumps:
+        add(sweep(0.3, 330, 660, 9), j, 0.12)
+    for t_in, t_out in tl.friend:
+        for h in range(3):
+            add(sweep(0.2, 400, 800, 12), t_in + h * 0.33, 0.08)
     for c in tl.clears:
         add(sweep(0.5, 400, 1600, 5), c, 0.2)
     return mix

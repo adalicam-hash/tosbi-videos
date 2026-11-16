@@ -26,6 +26,7 @@ Character: Tosbi, a calm, curious turtle; a surprise pops out of his shell every
 ## Engine
 - `python3 pipeline/engine.py OUT v|h seg1,seg2 [--long]` builds video + EN/TR mixes from pipeline/episodes.py.
 - v = vertical Short (one segment, no repetition). h = 16:9 long video (several segments, --long adds 'say it with me' + 'where is the ...?' quiz).
+- Zıpzıp: segment with friend=True + line parts tagged "zip" (see CHARACTERS.md).
 - New content = add a segment to episodes.py (3 items) and, if needed, a drawing to items.py (original designs only).
 - TR tracks are stored in tr_tracks/ for the owner to upload in YouTube Studio.
 

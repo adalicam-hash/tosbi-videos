@@ -70,3 +70,54 @@ def quiz_q(it):
 def quiz_a(it):
     w = [("en", it["word"].capitalize() + "!")]
     return [("en", "There it is!")] + w, [("tr", "İşte orada!")] + w
+
+# ---- week 2026-11-16
+# Parts may carry a third element "zip" = spoken by Zıpzıp (own voice + mouth). Default speaker = Tosbi.
+SEGMENTS["farm"] = dict(
+    word_color=["#8B5E3C", "#7B4BC8", "#E94B3C"],
+    items=[
+        dict(kind="cow", name="cow", tr_name="İnek", word="COW",
+             en=[("en", "Moo, moo!"), ("en", "A cow!")], tr=[("tr", "Mö, mö! Bir inek!"), ("en", "Cow!")]),
+        dict(kind="sheep", name="sheep", tr_name="Koyun", word="SHEEP",
+             en=[("en", "Baa, baa!"), ("en", "A sheep!")], tr=[("tr", "Me, me! Bir koyun!"), ("en", "Sheep!")]),
+        dict(kind="chicken", name="chicken", tr_name="Tavuk", word="CHICKEN",
+             en=[("en", "Cluck, cluck!"), ("en", "A chicken!")], tr=[("tr", "Gıt gıt gıdak! Bir tavuk!"), ("en", "Chicken!")]),
+    ],
+    summary=dict(word="Farm friends!", en=[("en", "Three farm friends!")], tr=[("tr", "Üç çiftlik hayvanı!"), ("en", "Farm friends!")]),
+)
+
+SEGMENTS["things"] = dict(
+    word_color=["#3C8DE9", "#E94B3C", "#7B4BC8"],
+    items=[
+        dict(kind="cup", name="cup", tr_name="Bardak", word="CUP",
+             en=[("en", "Sip, sip!"), ("en", "A cup!")], tr=[("tr", "Höp höp! Bir bardak!"), ("en", "Cup!")]),
+        dict(kind="hat", name="hat", tr_name="Şapka", word="HAT",
+             en=[("en", "On my head!"), ("en", "A hat!")], tr=[("tr", "Başıma takarım! Bir şapka!"), ("en", "Hat!")]),
+        dict(kind="shoe", name="shoe", tr_name="Ayakkabı", word="SHOE",
+             en=[("en", "On my foot!"), ("en", "A shoe!")], tr=[("tr", "Ayağıma giyerim! Bir ayakkabı!"), ("en", "Shoe!")]),
+    ],
+    summary=dict(word="3 things!", en=[("en", "Three things for me!")], tr=[("tr", "Üç eşya!"), ("en", "Three things!")]),
+)
+
+# First episode with Zıpzıp (theme: taking turns). friend=True -> Zıpzıp hops in after the question.
+SEGMENTS["vehicles"] = dict(
+    friend=True,
+    word_color=["#E94B3C", "#E0A800", "#3C8DE9"],
+    items=[
+        dict(kind="car", name="car", tr_name="Araba", word="CAR",
+             en=[("en", "Beep, beep!"), ("en", "A car!")], tr=[("tr", "Bip, bip! Bir araba!"), ("en", "Car!")]),
+        dict(kind="bus", name="bus", tr_name="Otobüs", word="BUS",
+             en=[("en", "My turn! Honk, honk!", "zip"), ("en", "A bus!", "zip")],
+             tr=[("tr", "Sıra bende! Düt düt! Bir otobüs!", "zip"), ("en", "Bus!", "zip")]),
+        dict(kind="boat", name="boat", tr_name="Tekne", word="BOAT",
+             en=[("en", "Your turn, Tosbi!", "zip"), ("en", "Splash, splash!"), ("en", "A boat!")],
+             tr=[("tr", "Sıra sende Tosbi!", "zip"), ("tr", "Şıpır şıpır! Bir tekne!"), ("en", "Boat!")]),
+    ],
+    summary=dict(word="3 vehicles!", en=[("en", "Three vehicles!")], tr=[("tr", "Üç taşıt!"), ("en", "Three vehicles!")]),
+)
+
+FRIEND_HELLO = dict(en=[("en", "Hi Tosbi! I'm Zipzip!", "zip"), ("en", "Me first! Me first!", "zip")],
+                    tr=[("tr", "Merhaba Tosbi! Ben Zıpzıp! Önce ben, önce ben!", "zip")])
+TAKE_TURNS = dict(en=[("en", "Hi Zipzip!"), ("en", "Let's take turns!")],
+                  tr=[("tr", "Merhaba Zıpzıp! Hadi sırayla yapalım."), ("en", "Take turns!")], word="Take turns!")
+FRIEND_BYE = dict(en=[("en", "Taking turns is fun!", "zip")], tr=[("tr", "Sırayla oynamak çok eğlenceli!", "zip")])
