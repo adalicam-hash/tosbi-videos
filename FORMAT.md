@@ -14,7 +14,12 @@ Character: Tosbi, a calm, curious turtle; a surprise pops out of his shell every
 ## Timing rules
 - Visual event first (ball pops etc.), then lines in BOTH languages start after it.
 - On-screen English word appears when the English word is spoken (both tracks).
-- Tosbi's mouth animates during the union of EN and TR speech windows.
+- Lip sync (2026-11-16, owner feedback "ağız hareketlerinde sıkıntı"): the mouth follows the LOUDNESS of each
+  speaker's EN voice frame by frame (closed / small / open), not a fixed flap over the union of EN+TR windows
+  (old method: ~40% of mouth movement happened while the EN track was silent).
+- Because one video serves both tracks, every TR line must be about as long as its EN line (TR/EN 0.8–1.25).
+  Write short TR lines, give EN lines a little more, run `python3 pipeline/engine.py --check` (0 lines flagged)
+  before rendering. The engine also speeds TR lines up by at most 20% to close small gaps.
 - Leave short gaps after each new English word so the TR track can repeat it.
 
 ## Publishing

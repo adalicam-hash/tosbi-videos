@@ -60,6 +60,8 @@ def zipzip(x, y, scale=1.0, expr="happy", blink=0.0, ear=0.0, look=(0, 0), flip=
     g.append(f'<path d="M -29 -168 L -17 -168 L -23 -161 Z" fill="#E86A7E" stroke="{INK}" stroke-width="3"/>')
     if expr == "talk":
         g.append(f'<path d="M -40 -158 Q -23 -126 -6 -158 Z" fill="#7A2E2E" stroke="{INK}" stroke-width="4"/>')
+    elif expr == "talk_small":
+        g.append(f'<path d="M -35 -158 Q -23 -143 -11 -158 Z" fill="#7A2E2E" stroke="{INK}" stroke-width="4"/>')
     elif expr == "surprised":
         g.append(f'<ellipse cx="-23" cy="-148" rx="8" ry="10" fill="#7A2E2E" stroke="{INK}" stroke-width="4"/>')
     else:

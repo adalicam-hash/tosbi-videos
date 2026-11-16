@@ -46,6 +46,8 @@ def tosbi(x, y, scale=1.0, expr="happy", lid=0.0, blink=0.0, legs=0.0,
     g.append(_eye(246, -158, blink, look))
     if expr == "surprised":
         g.append(f'<ellipse cx="238" cy="-112" rx="11" ry="14" fill="#7A2E2E" stroke="{INK}" stroke-width="5"/>')
+    elif expr == "talk_small":
+        g.append(f'<path d="M 220 -117 Q 236 -103 252 -117 Z" fill="#7A2E2E" stroke="{INK}" stroke-width="5"/>')
     elif expr == "talk":
         g.append(f'<path d="M 214 -118 Q 236 -92 260 -118 Z" fill="#7A2E2E" stroke="{INK}" stroke-width="5"/>')
     else:

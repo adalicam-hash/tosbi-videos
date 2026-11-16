@@ -92,6 +92,22 @@ def voice(parts):
     return np.concatenate(out), on, spans
 
 
+def _stretch(y, rate):
+    """Speed up a voice clip by `rate` (>1) without changing pitch (ffmpeg atempo)."""
+    key = hashlib.md5(y.tobytes()[:400000] + f"{len(y)}|{rate:.3f}".encode()).hexdigest()
+    fn = f"{CACHE}/st_{key}.wav"
+    if not os.path.exists(fn):
+        src = fn + ".src.wav"
+        sf.write(src, y, SR)
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src, "-af", f"atempo={rate:.4f}", "-ar", str(SR), fn], check=True)
+        os.remove(src)
+    z, _ = sf.read(fn)
+    return z if z.ndim == 1 else z.mean(1)
+
+
+MAX_TR_SPEEDUP = 1.2  # TR lines longer than the EN line are sped up (max 20%) so the mouth matches both tracks
+
+
 def _last_en(parts):
     return max(i for i, p in enumerate(parts) if p[0] == "en")
 
@@ -100,6 +116,7 @@ def _last_en(parts):
 class TL:
     def __init__(self):
         self.en, self.tr, self.talk, self.ztalk = [], [], [], []
+        self.envoice, self.mouth = [], {}
         self.friend, self.zjumps = [], []  # Zıpzıp visits [t_in, t_out] and little jumps
         self.knocks, self.bubbles, self.pops, self.words, self.bounces = [], [], [], [], []
         self.numbers, self.celebrate, self.clears, self.chapters = [], [], [], []
@@ -110,6 +127,11 @@ class TL:
     def place(self, en_parts, tr_parts, t, align=True):
         ea, eo, es = voice(en_parts)
         ta, to, ts = voice(tr_parts)
+        rate = min(len(ta) / len(ea), MAX_TR_SPEEDUP)
+        if rate > 1.03:  # fit TR into the EN line length (mouth animation follows the EN voice)
+            ta = _stretch(ta, rate)
+            to = [o / rate for o in to]
+            ts = [(a / rate, b / rate, w) for a, b, w in ts]
         if align:
             oe, ot = eo[_last_en(en_parts)], to[_last_en(tr_parts)]
             m = max(oe, ot)
@@ -122,6 +144,8 @@ class TL:
         for base, spans in [(se, es), (st, ts)]:
             for a, b, who in spans:
                 (self.ztalk if who == "zip" else self.talk).append((base + a, base + b - 0.08))
+        for a, b, who in es:  # EN voice per speaker -> lip-sync envelope
+            self.envoice.append((se + a, ea[int(a * SR):int(b * SR)], who))
         # Zıpzıp hops when he starts a line
         for base, spans in [(se, es)]:
             zs = [a for a, b, w in spans if w == "zip"]
@@ -211,7 +235,40 @@ def build(seg_names, long=False):
     tl.bye = wt
     tl.words.append(dict(t=wt, text="Bye-bye!", color="#E94B3C"))
     tl.dur = end + 1.6
+    lipsync(tl)
     return tl
+
+
+def lipsync(tl):
+    """Mouth openness per frame (0 closed, 1 small, 2 open) from the loudness of each speaker's EN voice."""
+    n = int(tl.dur * FPS) + 2
+    hop = SR // FPS
+    for who in ("tosbi", "zip"):
+        env = np.zeros(n)
+        for st, y, w in tl.envoice:
+            if w != who or len(y) < hop:
+                continue
+            k = len(y) // hop
+            r = np.sqrt((y[:k * hop].reshape(k, hop) ** 2).mean(1))
+            i0 = int(round(st * FPS))
+            m = min(k, n - i0)
+            env[i0:i0 + m] = np.maximum(env[i0:i0 + m], r[:m])
+        ref = np.percentile(env[env > 0], 90) if (env > 0).any() else 1.0
+        x = env / ref
+        lvl = np.where(x > 0.5, 2, np.where(x > 0.18, 1, 0))
+        # drop 1-frame blips so the mouth doesn't flicker
+        for i in range(1, n - 1):
+            if lvl[i] != lvl[i - 1] and lvl[i] != lvl[i + 1] and lvl[i - 1] == lvl[i + 1]:
+                lvl[i] = lvl[i - 1]
+        tl.mouth[who] = lvl
+
+
+def mouth_expr(tl, who, t):
+    lv = tl.mouth.get(who)
+    i = int(round(t * FPS))
+    if lv is None or i >= len(lv):
+        return "happy"
+    return {0: "happy", 1: "talk_small", 2: "talk"}[int(lv[i])]
 
 
 # ---------------------------------------------------------------- drawing
@@ -282,9 +339,9 @@ def draw_friend(tl, L, t):
                 y -= 50 * abs(math.sin((t - a) * 6 + 1))
         if tl.bye and t >= tl.bye:
             y -= 50 * abs(math.sin((t - tl.bye) * 6 + 1))
-        talking = any(a <= t <= b for a, b in tl.ztalk)
         surprised = any(pp["t"] - 0.1 <= t < pp["t"] + 0.5 for pp in tl.pops)
-        expr = "surprised" if surprised else ("talk" if talking and int(t * 9) % 2 == 0 else "happy")
+        m = mouth_expr(tl, "zip", t)
+        expr = m if m != "happy" else ("surprised" if surprised else "happy")
         bt = (t + 1.3) % 2.7
         blink = math.sin(bt / 0.14 * math.pi) if bt < 0.14 else 0.0
         return zipzip(x, y, zs, expr=expr, blink=blink, ear=ear, look=(-3, -6), squash=sq)
@@ -320,8 +377,8 @@ def frame_svg(tl, L, t):
             surprised = surprised or t < tp + 0.6
     bt = t % 3.1
     blink = math.sin(bt / 0.14 * math.pi) if bt < 0.14 else 0.0
-    talking = any(a <= t <= b for a, b in tl.talk)
-    expr = "surprised" if surprised else ("talk" if talking and int(t * 8) % 2 == 0 else "happy")
+    m = mouth_expr(tl, "tosbi", t)
+    expr = m if m != "happy" else ("surprised" if surprised else "happy")
     look = (0, -6) if any(a <= t < b for a, b in tl.bubbles) else ((-4, -8) if tl.pops and t >= tl.pops[0]["t"] else (0, 0))
     p.append(tosbi(x, G, TS, expr=expr, lid=lid, blink=blink, legs=t * 14 if walking else 0, look=look, squash=squash))
     bx, by = L["BUBBLE"]
@@ -491,7 +548,33 @@ def render_video(tl, L, path, workers=2):
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", path], check=True)
 
 
+def all_lines():
+    for name, seg in E.SEGMENTS.items():
+        for it in seg["items"]:
+            yield f"{name}/{it['name']}", it["en"], it["tr"]
+            yield f"{name}/quiz-q {it['name']}", *E.quiz_q(it)
+            yield f"{name}/quiz-a {it['name']}", *E.quiz_a(it)
+        yield f"{name}/summary", seg["summary"]["en"], seg["summary"]["tr"]
+    for k in ["INTRO", "ASK", "ASK_AGAIN", "KNOCK", "REPEAT", "COUNT", "OUTRO", "QUIZ_INTRO", "FRIEND_HELLO", "TAKE_TURNS", "FRIEND_BYE"]:
+        d = getattr(E, k)
+        yield k, d["en"], d["tr"]
+
+
+def check_lengths(lo=0.8, hi=1.25):
+    """Lip-sync guard: list lines whose TR length differs too much from EN (see episodes.py LENGTH RULE)."""
+    bad = 0
+    for name, en, tr in all_lines():
+        r = len(voice(tr)[0]) / len(voice(en)[0])
+        flag = "" if lo <= r <= hi else "  <-- rewrite"
+        bad += bool(flag)
+        print(f"{r:5.2f}  {name}{flag}", flush=True)
+    print(f"{bad} line(s) outside {lo}-{hi}")
+    return bad
+
+
 def main():
+    if sys.argv[1] == "--check":
+        sys.exit(1 if check_lengths() else 0)
     prefix, lay, segs = sys.argv[1], sys.argv[2], sys.argv[3].split(",")
     long = "--long" in sys.argv
     L = LAYOUTS[lay]
